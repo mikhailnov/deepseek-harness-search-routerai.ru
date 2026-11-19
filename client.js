@@ -1,0 +1,232 @@
+/**
+ * Клиентская половина бандла: страница настроек плагина «Веб-поиск RouterAI»
+ * в менеджере плагинов (слот plugins.row.config). Рисует форму настройки
+ * API-ключа, модели, движка и параметров поиска; сохранение идёт через
+ * Host-владельца страницы (props.form.mutate) с ревизией.
+ */
+window.__ModuleLoader__.load({
+  id: '@local/dsh-web-search-routerai',
+  factory(require) {
+    const React = require('react')
+    const { useState } = React
+    const h = React.createElement
+
+    const ROW_KEY = '@local/dsh-web-search-routerai#web-search-routerai'
+
+    /** Проверенные модели веб-поиска (см. index.js и docs/DETAIL.md). */
+    const MODELS = [
+      ['google/gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite — дешёвая, цитаты (native)'],
+      ['google/gemini-3-flash-preview', 'Gemini 3 Flash Preview (native)'],
+      ['google/gemini-3.6-flash', 'Gemini 3.6 Flash (native)'],
+      ['openai/gpt-4.1-mini', 'GPT-4.1 Mini (native)'],
+      ['openai/gpt-5.4-mini', 'GPT-5.4 Mini (native)'],
+      ['x-ai/grok-4.20', 'Grok 4.20 — дешёвый поиск (native)'],
+      ['x-ai/grok-4.6', 'Grok 4.6 — дешёвый поиск (native)'],
+      ['anthropic/claude-haiku-4.5', 'Claude Haiku 4.5 — текст без аннотаций (native)'],
+      ['anthropic/claude-haiku-5.5', 'Claude Haiku 5.5 (native)'],
+      ['perplexity/sonar', 'Perplexity Sonar (только auto/exa)'],
+      ['openai/gpt-5-nano', 'GPT-5 Nano — самая дешёвая OpenAI (exa)'],
+      ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
+      ['z-ai/glm-5', 'GLM 5 — хороша по-русски (exa)'],
+      ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 (exa)'],
+      ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — поиск бесплатно (auto)'],
+    ]
+    const ENGINES = [
+      ['auto', 'Auto — RouterAI сам выбирает движок (рекомендуется)'],
+      ['native', 'Native — нативный поиск провайдера модели'],
+      ['exa', 'Exa — работает с любой моделью (~0,45 ₽ за результат)'],
+    ]
+
+    const css = {
+      section: { display: 'grid', gap: '14px' },
+      row: { display: 'grid', gap: '4px' },
+      label: { fontSize: '13px', color: 'var(--dsw-alias-label-primary, inherit)', fontWeight: 600 },
+      hint: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary, inherit)', margin: 0 },
+      input: {
+        width: '100%', boxSizing: 'border-box', padding: '6px 8px', fontSize: '13px',
+        color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-base, transparent)',
+        border: '1px solid var(--dsw-alias-border-l2, currentColor)', borderRadius: '6px',
+      },
+      buttons: { display: 'flex', gap: '8px', alignItems: 'center' },
+      button: {
+        padding: '6px 14px', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+        color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-layer-2, transparent)',
+        border: '1px solid var(--dsw-alias-border-l2, currentColor)',
+      },
+      primary: { background: 'var(--dsw-alias-brand-primary, #2563eb)', color: '#fff', border: 'none' },
+      status: { fontSize: '12px' },
+      ok: { color: 'var(--dsw-alias-state-success-primary, inherit)' },
+      err: { color: 'var(--dsw-alias-state-error-primary, inherit)' },
+      warn: { color: 'var(--dsw-alias-state-warn-primary, inherit)' },
+    }
+
+    /**
+     * Одна форма настроек. Черновик локальный; «Сохранить» отправляет только
+     * изменённые поля (set) и сброс ключа (unset) с ревизией снапшота.
+     */
+    function RouterAiSettings(props) {
+      const form = props.form
+      if (props.view === 'summary') return 'API-ключ, модель и движок веб-поиска RouterAI'
+      if (form === undefined) {
+        return h('p', { style: css.hint }, 'Настройки недоступны: конфигурация плагина не открыта в этом профиле.')
+      }
+      const snapshot = form.state
+      const value = snapshot.value ?? {}
+      const userLayer = snapshot.user ?? {}
+      const [draft, setDraft] = useState({})
+      const [saving, setSaving] = useState(false)
+      const [failed, setFailed] = useState(false)
+      const [keyInput, setKeyInput] = useState('')
+      const [dropKey, setDropKey] = useState(false)
+      const set = (name, next) => setDraft(current => ({ ...current, [name]: next }))
+      const field = (name, fallback) => (name in draft ? draft[name] : (value[name] ?? fallback))
+
+      const keyConfigured = dropKey ? false : Boolean(keyInput) || userLayer.apiKey !== undefined
+
+      const save = async () => {
+        const ops = []
+        if (dropKey) ops.push({ op: 'unset', path: ['apiKey'] })
+        else if (keyInput !== '') ops.push({ op: 'set', path: ['apiKey'], value: keyInput.trim() })
+        for (const name of ['baseUrl', 'model', 'engine', 'searchPrompt']) {
+          if (name in draft && draft[name] !== (value[name] ?? '')) {
+            ops.push({ op: 'set', path: [name], value: String(draft[name]) })
+          }
+        }
+        for (const name of ['maxResults', 'maxTokens', 'timeoutMs']) {
+          if (name in draft) {
+            const parsed = Number(draft[name])
+            if (!Number.isInteger(parsed) || parsed <= 0) { setFailed(true); return }
+            if (parsed !== value[name]) ops.push({ op: 'set', path: [name], value: parsed })
+          }
+        }
+        for (const name of ['includeDomains', 'excludeDomains']) {
+          if (name in draft) {
+            const list = String(draft[name]).split(',').map(s => s.trim()).filter(s => s !== '')
+            if (JSON.stringify(list) !== JSON.stringify(value[name] ?? [])) {
+              ops.push({ op: 'set', path: [name], value: list })
+            }
+          }
+        }
+        if (ops.length === 0) return
+        setSaving(true); setFailed(false)
+        try {
+          const accepted = await form.mutate(ops, snapshot.revision)
+          setFailed(!accepted)
+          if (accepted) { setDraft({}); setKeyInput(''); setDropKey(false) }
+        } catch { setFailed(true) }
+        setSaving(false)
+      }
+
+      const disabled = saving || !snapshot.writable
+      const numberInput = (name, label, hint) => h('div', { style: css.row },
+        h('label', { style: css.label, htmlFor: `routerai-${name}` }, label),
+        h('input', {
+          id: `routerai-${name}`, style: css.input, type: 'number', disabled,
+          value: field(name, ''),
+          onChange: e => set(name, e.target.value),
+        }),
+        hint ? h('p', { style: css.hint }, hint) : null)
+
+      return h('div', { style: css.section },
+        h('style', null, `
+          [data-routerai-settings] input:disabled, [data-routerai-settings] select:disabled { opacity: .5 }
+          [data-routerai-settings] select { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
+            color: var(--dsw-alias-label-primary, inherit); background: var(--dsw-alias-bg-base, transparent);
+            border: 1px solid var(--dsw-alias-border-l2, currentColor); border-radius: 6px }
+        `),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-apiKey' }, 'API-ключ RouterAI'),
+          h('input', {
+            id: 'routerai-apiKey', style: css.input, type: 'password', disabled,
+            placeholder: 'sk-…', value: keyInput, autoComplete: 'new-password',
+            onChange: e => { setKeyInput(e.target.value); setDropKey(false) },
+          }),
+          h('p', { style: css.hint },
+            'Ключ из личного кабинета routerai.ru. ',
+            keyConfigured
+              ? h('span', { style: css.ok }, 'Ключ настроен.')
+              : h('span', { style: css.warn }, 'Без ключа инструмент web_search модели не предлагается.'),
+          ),
+          userLayer.apiKey !== undefined && !dropKey ? h('button', {
+            type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
+            onClick: () => { setDropKey(true); setKeyInput('') },
+          }, 'Удалить сохранённый ключ') : null,
+          dropKey ? h('p', { style: css.hint }, 'Ключ будет удалён при сохранении.') : null),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-model' }, 'Модель поиска'),
+          h('select', {
+            id: 'routerai-model', style: css.input, disabled,
+            value: field('model', 'google/gemini-2.5-flash-lite'),
+            onChange: e => set('model', e.target.value),
+          }, MODELS.map(([id, label]) => h('option', { key: id, value: id }, `${id} — ${label}`))),
+          h('p', { style: css.hint }, 'Только модели, проверенные с веб-поиском RouterAI. Дешевле всего: Qwen 3.5 9B или GPT-5 Nano с движком exa.')),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-engine' }, 'Движок поиска'),
+          h('select', {
+            id: 'routerai-engine', style: css.input, disabled,
+            value: field('engine', 'auto'),
+            onChange: e => set('engine', e.target.value),
+          }, ENGINES.map(([id, label]) => h('option', { key: id, value: id }, label))),
+          h('p', { style: css.hint }, 'Native поддерживают не все модели — при ошибке выберите auto или exa.')),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-baseUrl' }, 'Базовый URL API'),
+          h('input', {
+            id: 'routerai-baseUrl', style: css.input, type: 'text', disabled,
+            placeholder: 'https://routerai.ru/api/v1', value: field('baseUrl', ''),
+            onChange: e => set('baseUrl', e.target.value),
+          }),
+          h('p', { style: css.hint }, 'Меняйте только для совместимого прокси.')),
+        numberInput('maxResults', 'Максимум результатов', 'От 1 до 20; влияет на стоимость (exa — за каждый результат).'),
+        numberInput('maxTokens', 'Лимит токенов ответа', 'Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.'),
+        numberInput('timeoutMs', 'Таймаут запроса, мс'),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-searchPrompt' }, 'Промпт для поиска (необязательно)'),
+          h('input', {
+            id: 'routerai-searchPrompt', style: css.input, type: 'text', disabled,
+            placeholder: 'Например: Ищи актуальные и достоверные источники', value: field('searchPrompt', ''),
+            onChange: e => set('searchPrompt', e.target.value),
+          })),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-includeDomains' }, 'Только домены (через запятую)'),
+          h('input', {
+            id: 'routerai-includeDomains', style: css.input, type: 'text', disabled,
+            placeholder: 'например: wikipedia.org, cbr.ru',
+            value: (draft.includeDomains !== undefined)
+              ? draft.includeDomains
+              : (value.includeDomains ?? []).join(', '),
+            onChange: e => set('includeDomains', e.target.value),
+          })),
+        h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: 'routerai-excludeDomains' }, 'Исключить домены (через запятую)'),
+          h('input', {
+            id: 'routerai-excludeDomains', style: css.input, type: 'text', disabled,
+            value: (draft.excludeDomains !== undefined)
+              ? draft.excludeDomains
+              : (value.excludeDomains ?? []).join(', '),
+            onChange: e => set('excludeDomains', e.target.value),
+          })),
+        h('div', { style: css.buttons },
+          h('button', { type: 'button', style: { ...css.button, ...css.primary }, disabled, onClick: save },
+            saving ? 'Сохранение…' : 'Сохранить'),
+          h('button', {
+            type: 'button', style: css.button, disabled,
+            onClick: () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false) },
+          }, 'Отменить изменения'),
+          failed ? h('span', { style: { ...css.status, ...css.err } }, 'Сохранение не удалось — проверьте значения.') : null,
+          !snapshot.writable ? h('span', { style: { ...css.status, ...css.warn } }, 'Профиль только для чтения.') : null),
+      )
+    }
+
+    return {
+      inject: ['slots'],
+      apply(ctx) {
+        ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
+          name: 'plugins.row.config',
+          id: 'web-search-routerai',
+          key: ROW_KEY,
+          order: 10,
+        }, RouterAiSettings))
+      },
+    }
+  },
+})

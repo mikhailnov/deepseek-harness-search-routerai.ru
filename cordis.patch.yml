@@ -2,8 +2,10 @@
 # Строка `web` переопределяет закрепление из базовой композиции
 # (searchProvider: deepseek-search-api) на routerai; остальной конфиг строки
 # повторяет базовый, так как совпадающее переопределение заменяет config целиком.
+# id строки равен имени пакета: так форма настроек (plugins.bundle.config)
+# получает значения конфигурации на странице бандла.
 - insert:
-    - id: web-search-routerai
+    - id: '@local/dsh-web-search-routerai'
       name: '@local/dsh-web-search-routerai'
       config: {}
 - id: web

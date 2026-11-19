@@ -11,7 +11,8 @@ window.__ModuleLoader__.load({
     const { useState } = React
     const h = React.createElement
 
-    const ROW_KEY = '@local/dsh-web-search-routerai#web-search-routerai'
+    const PKG = '@local/dsh-web-search-routerai'
+    const ROW_KEY = `${PKG}#${PKG}`
 
     /** Проверенные модели веб-поиска (см. index.js и docs/DETAIL.md). */
     const MODELS = [
@@ -275,6 +276,15 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        // Первый путь к настройкам: форма прямо на странице плагина,
+        // между описанием и списком компонентов.
+        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+          name: 'plugins.bundle.config',
+          id: 'web-search-routerai',
+          key: PKG,
+          order: 10,
+        }, RouterAiSettings))
+        // Второй путь: страница настройки строки (кнопка Configure у компонента).
         ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
           name: 'plugins.row.config',
           id: 'web-search-routerai',

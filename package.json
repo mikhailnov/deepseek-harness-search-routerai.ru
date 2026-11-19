@@ -1,0 +1,29 @@
+{
+  "name": "@local/dsh-web-search-routerai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Веб-поиск через RouterAI (https://routerai.ru) для DeepSeek Harness: провайдер ctx.web с выбором модели и движка поиска (native / exa / auto).",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "vendor",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.9"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

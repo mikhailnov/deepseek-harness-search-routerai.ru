@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Веб-поиск RouterAI",
+    "description": "Инструмент web_search через API RouterAI (routerai.ru): настраиваемый API-ключ, модель и движок поиска (auto / native / exa). Работает без учётной записи DeepSeek — плата списывается с баланса RouterAI.",
+    "detail": "docs/DETAIL.md"
+  }
+}

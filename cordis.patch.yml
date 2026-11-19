@@ -1,0 +1,13 @@
+# Слой бандла: провайдер поиска RouterAI и закрепление его в службе web.
+# Строка `web` переопределяет закрепление из базовой композиции
+# (searchProvider: deepseek-search-api) на routerai; остальной конфиг строки
+# повторяет базовый, так как совпадающее переопределение заменяет config целиком.
+- insert:
+    - id: web-search-routerai
+      name: '@local/dsh-web-search-routerai'
+      config: {}
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: routerai
+    fetchProvider: http

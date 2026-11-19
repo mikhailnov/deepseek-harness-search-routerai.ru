@@ -1,0 +1,191 @@
+/**
+ * Веб-поиск через RouterAI (https://routerai.ru) для DeepSeek Harness.
+ *
+ * Регистрирует провайдера `routerai` в службе `ctx.web`, поэтому инструмент
+ * `web_search` harness начинает работать без учётной записи DeepSeek: запрос
+ * уходит в RouterAI Chat Completions с плагином `web`, а ответ (текст и
+ * цитаты `url_citation`) нормализуется в `WebSearchResult`.
+ *
+ * Настройки (API-ключ, модель, движок поиска и его параметры) редактируются
+ * на странице плагина в менеджере плагинов DSH.
+ * @module @local/dsh-web-search-routerai
+ */
+
+// Вендорные копии @deepseek-ai/schemastery 3.19.0 и @deepseek-ai/cosmokit
+// (обе MIT): плагин самодостаточен и не зависит от установки пакетов в профиле DSH.
+import z from './vendor/node_modules/@deepseek-ai/schemastery/lib/index.mjs'
+
+/** Cordis plugin name used by loader diagnostics. */
+export const name = 'web-search-routerai'
+
+/** Служба web, в которую регистрируется провайдер поиска. */
+export const inject = ['web']
+
+const DEFAULT_BASE_URL = 'https://routerai.ru/api/v1'
+const DEFAULT_TIMEOUT_MS = 120000
+
+/**
+ * Модели, проверенные с веб-поиском RouterAI 2026-11-18. Движок `native`
+ * поддерживают только провайдеры с собственным поиском (OpenAI, Google,
+ * xAI, Anthropic); движок `exa` работает с любой моделью, `auto` выбирает
+ * подходящий сам. Цены за запрос поиска: OpenAI/Anthropic ~1,07–1,23 ₽,
+ * Google ~1,5 ₽, xAI ~0,53 ₽, Exa ~0,45 ₽ за результат.
+ */
+const SEARCH_MODELS = [
+  ['google/gemini-2.5-flash-lite', 'Google Gemini 2.5 Flash Lite — дешёвая, быстрая, с цитатами (native)'],
+  ['google/gemini-3-flash-preview', 'Google Gemini 3 Flash Preview — быстрая, цитаты (native)'],
+  ['google/gemini-3.6-flash', 'Google Gemini 3.6 Flash — свежая Flash-модель (native)'],
+  ['openai/gpt-4.1-mini', 'OpenAI GPT-4.1 Mini — дешёвая, подробные цитаты (native)'],
+  ['openai/gpt-5.4-mini', 'OpenAI GPT-5.4 Mini — быстрая, цитаты (native)'],
+  ['x-ai/grok-4.20', 'xAI Grok 4.20 — дешёвый поиск (~0,53 ₽/запрос, native)'],
+  ['x-ai/grok-4.6', 'xAI Grok 4.6 — дешёвый поиск (~0,59 ₽/запрос, native)'],
+  ['anthropic/claude-haiku-4.5', 'Anthropic Claude Haiku 4.5 — ответ без аннотаций, только текст (native)'],
+  ['anthropic/claude-haiku-5.5', 'Anthropic Claude Haiku 5.5 — дешёвая, хорошие ответы (native)'],
+  ['perplexity/sonar', 'Perplexity Sonar — только движок auto или exa, не native'],
+  ['openai/gpt-5-nano', 'OpenAI GPT-5 Nano — самая дешёвая OpenAI (exa)'],
+  ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
+  ['z-ai/glm-5', 'Z.ai GLM 5 — хорошо русским языком (exa)'],
+  ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 — дешёвая (exa)'],
+  ['yandex/aliceai-llm-flash', 'Яндекс AliceAI LLM Flash — поиск бесплатно (auto)'],
+]
+
+const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).description(description))
+
+/** Конфигурация плагина; редактируется в менеджере плагинов DSH. */
+export const Config = z.object({
+  apiKey: z.string().role('secret').description('API-ключ RouterAI из личного кабинета https://routerai.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
+  baseUrl: z.string().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
+  model: z.union(modelChoices).description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всего: Qwen 3.5 9B и GPT-5 Nano с движком exa; Gemini 2.5 Flash Lite — дешёвый вариант с нативным поиском.').default('google/gemini-2.5-flash-lite'),
+  engine: z.union([
+    z.const('auto').description('Auto — RouterAI сам выбирает движок (рекомендуется)'),
+    z.const('native').description('Native — нативный поиск провайдера модели (OpenAI, Google, xAI, Anthropic, Perplexity)'),
+    z.const('exa').description('Exa — поиск Exa, работает с любой моделью (~0,45 ₽ за результат)'),
+  ]).description('Поисковый движок RouterAI. Native не поддерживает все модели — при ошибке выберите auto или exa.').default('auto'),
+  maxResults: z.number().step(1).min(1).max(20).description('Максимум результатов поиска в одном запросе.').default(5),
+  maxTokens: z.number().step(1).min(64).max(8192).description('Лимит токенов ответа модели. Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.').default(1024),
+  searchPrompt: z.string().description('Необязательный системный промпт для поисковых запросов (например, «Ищи актуальные и достоверные источники»).').default(''),
+  includeDomains: z.array(z.string()).description('Ограничить поиск только этими доменами (например, wikipedia.org). Поддерживаются подстановочные знаки; совместимость зависит от движка.').default([]),
+  excludeDomains: z.array(z.string()).description('Исключить эти домены из результатов. Совместимость зависит от движка.').default([]),
+  timeoutMs: z.number().step(1).min(5000).max(300000).description('Таймаут одного поискового запроса, мс.').default(DEFAULT_TIMEOUT_MS),
+})
+
+/**
+ * Разобрать ответ RouterAI в WebSearchResult: текст ответа — в content,
+ * аннотации url_citation — в sources (приводится к общему виду, дубли URL
+ * отбрасываются).
+ * @param {any} data - тело ответа /chat/completions.
+ * @returns {{ content: string, sources: Array<{url:string,title?:string,snippet?:string}>, truncated: false }}
+ */
+function toSearchResult(data) {
+  const message = data?.choices?.[0]?.message ?? {}
+  const content = typeof message.content === 'string' ? message.content.trim() : ''
+  const seen = new Set()
+  const sources = []
+  for (const annotation of message.annotations ?? []) {
+    if (annotation?.type !== 'url_citation') continue
+    const citation = annotation.url_citation ?? {}
+    if (typeof citation.url !== 'string' || citation.url.length === 0 || seen.has(citation.url)) continue
+    seen.add(citation.url)
+    sources.push({
+      url: citation.url,
+      ...(typeof citation.title === 'string' && citation.title.length > 0 ? { title: citation.title } : {}),
+      ...(typeof citation.content === 'string' && citation.content.length > 0 ? { snippet: citation.content } : {}),
+    })
+  }
+  return { content, sources, truncated: false }
+}
+
+/**
+ * Описание ошибки RouterAI: сообщение об ошибке API, если оно есть, иначе
+ * краткая сводка по HTTP-статусу и телу.
+ * @param {number} status - HTTP-статус ответа.
+ * @param {string} body - тело ответа.
+ * @returns {string} Текст ошибки для модели и пользователя.
+ */
+function describeFailure(status, body) {
+  try {
+    const parsed = JSON.parse(body)
+    const message = parsed?.error?.message ?? parsed?.message
+    if (typeof message === 'string' && message.length > 0) {
+      return `RouterAI web search failed (HTTP ${status}): ${message}`
+    }
+  } catch { /* Тело не JSON — используем сводку ниже. */ }
+  return `RouterAI web search failed (HTTP ${status}): ${body.slice(0, 300)}`
+}
+
+/**
+ * Зарегистрировать провайдера поиска `routerai` в `ctx.web`.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - контекст плагина.
+ * @param {ReturnType<typeof Config.get>} config - конфигурация плагина.
+ */
+export function apply(ctx, config) {
+  const apiKeyOf = () => {
+    const key = config.apiKey?.trim()
+    return key ? key : undefined
+  }
+
+  ctx.web.registerSearchProvider({
+    id: 'routerai',
+    title: 'RouterAI',
+    description: {
+      en: 'Web search through the RouterAI API (https://routerai.ru) with a selectable model and engine (auto / native / exa). Paid per request on the RouterAI balance.',
+      ru: 'Веб-поиск через API RouterAI (https://routerai.ru) с выбором модели и движка (auto / native / exa). Плата за запросы списывается с баланса RouterAI.',
+    },
+    available: () => apiKeyOf() !== undefined,
+    ready: async () => apiKeyOf() !== undefined,
+    search: async (request, signal) => {
+      const apiKey = apiKeyOf()
+      if (apiKey === undefined) throw new Error('RouterAI web search is not configured: set the API key in the plugin settings (Plugins → Web search RouterAI).')
+
+      const webPlugin = {
+        id: 'web',
+        max_results: request.maxResults ?? config.maxResults,
+        engine: config.engine,
+      }
+      if (config.includeDomains.length > 0) webPlugin.include_domains = config.includeDomains
+      if (config.excludeDomains.length > 0) webPlugin.exclude_domains = config.excludeDomains
+
+      const messages = [
+        {
+          role: 'system',
+          content: `Ты — поисковый ассистент. Ответь на запрос пользователя по результатам веб-поиска: кратко (до 200 слов), по-русски (если запрос не на русском — на языке запроса), только проверенные по источникам факты. Не добавляй пояснений о своей работе.${config.searchPrompt ? ` ${config.searchPrompt}` : ''}`,
+        },
+        { role: 'user', content: request.query },
+      ]
+
+      const timeout = AbortSignal.timeout(config.timeoutMs)
+      const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model,
+          plugins: [webPlugin],
+          messages,
+          max_tokens: config.maxTokens,
+        }),
+        signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+        // Ключ уходит только на настроенный эндпоинт: редиректы не следуются.
+        redirect: 'error',
+      })
+
+      const body = await response.text()
+      if (!response.ok) throw new Error(describeFailure(response.status, body))
+
+      let data
+      try {
+        data = JSON.parse(body)
+      } catch {
+        throw new Error(`RouterAI web search returned a non-JSON response (HTTP ${response.status}): ${body.slice(0, 300)}`)
+      }
+
+      const result = toSearchResult(data)
+      if (result.content.length === 0 && result.sources.length === 0) {
+        throw new Error('RouterAI web search returned neither an answer nor sources; try another model or engine (auto / exa) in the plugin settings.')
+      }
+      return result
+    },
+  })
+}

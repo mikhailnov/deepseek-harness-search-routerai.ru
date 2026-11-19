@@ -99,7 +99,6 @@ window.__ModuleLoader__.load({
       const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setInvalid(null) }
 
       const keyEntered = keyInput.trim() !== ''
-      const keyConfigured = dropKey ? false : keyEntered || userLayer.apiKey !== undefined
 
       const save = async () => {
         setInvalid(null)
@@ -189,10 +188,8 @@ window.__ModuleLoader__.load({
             onChange: e => { setKeyInput(e.target.value); setDropKey(false) },
           }),
           h('p', { style: css.hint },
-            'Ключ из личного кабинета routerai.ru. ',
-            keyConfigured
-              ? h('span', { style: css.ok }, 'Ключ настроен.')
-              : h('span', { style: css.warn }, 'Без ключа инструмент web_search модели не предлагается.'),
+            'Ключ из личного кабинета routerai.ru. Значение секрета не показывается, ',
+            'но сохранение и удаление работают; после «Сохранено» плагин подхватывает ключ без перезапуска.',
           ),
           userLayer.apiKey !== undefined && !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Веб-поиск через RouterAI (https://routerai.ru) для DeepSeek Harness: провайдер ctx.web с выбором модели и движка поиска (native / exa / auto).",
+  "description": "Веб-поиск через RouterAI.ru для DeepSeek Harness: провайдер ctx.web с выбором модели и движка поиска (native / exa / auto).",
   "exports": {
     ".": "./index.js",
     "./locale/*.json": "./locale/*.json",

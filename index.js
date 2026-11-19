@@ -66,7 +66,7 @@ const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).
 export const Config = z.object({
   apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета RouterAI.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
   baseUrl: z.string().volatile().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
-  model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всех yandex/aliceai-llm-flash (~0,05 ₽ за запрос, ответ без ссылок); со ссылками на источники — Qwen 3.5 9B или GPT-5 Nano с движком exa.').default('google/gemini-2.5-flash-lite'),
+  model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Самая дешёвая — yandex/aliceai-llm-flash (~0,05 ₽ за запрос, ответ без ссылок); со ссылками на источники — Qwen 3.5 9B или GPT-5 Nano с движком exa.').default('google/gemini-2.5-flash-lite'),
   engine: z.union([
     z.const('auto').description('Auto — RouterAI сам выбирает движок (рекомендуется)'),
     z.const('native').description('Native — нативный поиск провайдера модели (OpenAI, Google, xAI, Anthropic, Perplexity)'),

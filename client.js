@@ -28,7 +28,7 @@ window.__ModuleLoader__.load({
       ['perplexity/sonar', 'Perplexity Sonar (только auto/exa)'],
       ['openai/gpt-5-nano', 'GPT-5 Nano — самая дешёвая у OpenAI (exa)'],
       ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
-      ['z-ai/glm-5', 'GLM 5 — хорошо владеет русским языком (exa)'],
+      ['z-ai/glm-5', 'GLM 5 — поиск от Z.AI (exa)'],
       ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 (exa)'],
       ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
     ]

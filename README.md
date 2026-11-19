@@ -79,7 +79,7 @@ RouterAI (18 ноября 2026 года) — все доступны в выпа
 | `perplexity/sonar` | встроенный поиск Perplexity | только auto или exa |
 | `openai/gpt-5-nano` | самая дешёвая у OpenAI | exa |
 | **`qwen/qwen3.5-9b`** | **очень дешёвая; с движком exa — примерно 2,3 ₽ за запрос при 5 результатах** | **exa** |
-| `z-ai/glm-5` | хорошо владеет русским языком | exa |
+| `z-ai/glm-5` | поиск от [Z.AI](https://z.ai/subscribe?ic=OKXME28I1P) | exa |
 | `deepseek/deepseek-v3.2` | дешёвая | exa |
 | `yandex/aliceai-llm-flash` | самая дешёвая (~0,05 ₽ за запрос), ответ-конспект без ссылок | auto |
 

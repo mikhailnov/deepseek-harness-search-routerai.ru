@@ -276,13 +276,14 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
-        // Первый путь к настройкам: форма прямо на странице плагина,
-        // между описанием и списком компонентов.
-        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-          name: 'plugins.bundle.config',
-          id: 'web-search-routerai',
-          key: PKG,
-          order: 10,
+        // Первый путь к настройкам: карточка в списке настроек на странице
+        // Plugins (как у встроенных плагинов); id совпадает с id записи
+        // конфигурации, поэтому страница передаёт форме значения и сохранение.
+        ctx.slots.inject('plugins.item', () => ctx.slots.register({
+          name: 'plugins.item',
+          id: PKG,
+          order: 40,
+          label: () => 'Веб-поиск RouterAI',
         }, RouterAiSettings))
         // Второй путь: страница настройки строки (кнопка Configure у компонента).
         ctx.slots.inject('plugins.row.config', () => ctx.slots.register({

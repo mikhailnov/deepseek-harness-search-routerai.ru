@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
       ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
       ['z-ai/glm-5', 'GLM 5 — поиск от Z.AI (exa)'],
       ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 (exa)'],
-      ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
+      ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — краткий ответ от Яндекс.Алисы, конспект без ссылок, ~5 копеек за запрос (auto)'],
     ]
     const ENGINES = [
       ['auto', 'Auto — RouterAI сам выбирает движок (рекомендуется)'],

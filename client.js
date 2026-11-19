@@ -91,12 +91,13 @@ window.__ModuleLoader__.load({
       const [saving, setSaving] = useState(false)
       const [failed, setFailed] = useState(false)
       const [saved, setSaved] = useState(false)
+      const [noChanges, setNoChanges] = useState(false)
       const [invalid, setInvalid] = useState(null)
       const [keyInput, setKeyInput] = useState('')
       const [dropKey, setDropKey] = useState(false)
       const set = (name, next) => { setDraft(current => ({ ...current, [name]: next })); setSaved(false) }
       const field = (name, fallback) => (name in draft ? draft[name] : (value[name] ?? fallback))
-      const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setInvalid(null) }
+      const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setNoChanges(false); setInvalid(null) }
 
       const keyEntered = keyInput.trim() !== ''
 
@@ -138,8 +139,8 @@ window.__ModuleLoader__.load({
             ops.push({ op: 'set', path: [name], value: list })
           }
         }
-        if (ops.length === 0) { setSaved(true); return }
-        setSaving(true); setFailed(false); setSaved(false)
+        if (ops.length === 0) { setNoChanges(true); return }
+        setSaving(true); setFailed(false); setSaved(false); setNoChanges(false)
         try {
           const accepted = await form.mutate(ops, snapshot.revision)
           setFailed(!accepted)
@@ -191,11 +192,11 @@ window.__ModuleLoader__.load({
             'Ключ из личного кабинета routerai.ru. Значение секрета не показывается, ',
             'но сохранение и удаление работают; после «Сохранено» плагин подхватывает ключ без перезапуска.',
           ),
-          userLayer.apiKey !== undefined && !dropKey ? h('button', {
+          !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
             onClick: () => { setKeyInput(''); setDropKey(true) },
           }, 'Удалить сохранённый ключ') : null,
-          dropKey ? h('p', { style: css.hint }, 'Ключ будет удалён при сохранении.') : null),
+          dropKey ? h('p', { style: css.hint }, 'Ключ будет удалён при сохранении; если ключ не задан, ничего не изменится.') : null),
         h('div', { style: css.row },
           h('label', { style: css.label, htmlFor: 'routerai-model' }, 'Модель поиска'),
           h('select', {
@@ -257,7 +258,8 @@ window.__ModuleLoader__.load({
             invalid ? h('span', { style: css.err }, invalid)
               : failed ? h('span', { style: css.err }, 'Сохранение не удалось — проверьте значения.')
                 : saved ? h('span', { style: css.ok }, 'Сохранено.')
-                  : null),
+                  : noChanges ? h('span', { style: css.hint }, 'Нет изменений.')
+                    : null),
           !snapshot.writable ? h('span', { style: { ...css.status, ...css.warn } }, 'Профиль только для чтения.') : null),
       )
     }

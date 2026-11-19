@@ -200,7 +200,16 @@ export function apply(ctx, config) {
         throw new Error(`RouterAI web search timed out after ${timeoutMs} ms; increase the timeout or pick a faster model/engine in the plugin settings.`)
       }
 
-      const body = await response.text()
+      let body
+      try {
+        body = await response.text()
+      } catch (error) {
+        // Чтение тела идёт под тем же таймаутом: объясняем его так же, как aborted fetch.
+        if (signal?.aborted !== true && timeout.aborted === true) {
+          throw new Error(`RouterAI web search timed out after ${timeoutMs} ms; increase the timeout or pick a faster model/engine in the plugin settings.`)
+        }
+        throw error
+      }
       if (!response.ok) throw new Error(describeFailure(response.status, body))
 
       let data

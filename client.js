@@ -95,7 +95,7 @@ window.__ModuleLoader__.load({
       const [invalid, setInvalid] = useState(null)
       const [keyInput, setKeyInput] = useState('')
       const [dropKey, setDropKey] = useState(false)
-      const set = (name, next) => { setDraft(current => ({ ...current, [name]: next })); setSaved(false) }
+      const set = (name, next) => { setDraft(current => ({ ...current, [name]: next })); setSaved(false); setNoChanges(false) }
       const field = (name, fallback) => (name in draft ? draft[name] : (value[name] ?? fallback))
       const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setNoChanges(false); setInvalid(null) }
 
@@ -186,7 +186,7 @@ window.__ModuleLoader__.load({
           h('input', {
             id: 'routerai-apiKey', style: css.input, type: 'password', disabled,
             placeholder: 'sk-…', value: keyInput, autoComplete: 'new-password',
-            onChange: e => { setKeyInput(e.target.value); setDropKey(false) },
+            onChange: e => { setKeyInput(e.target.value); setDropKey(false); setSaved(false); setNoChanges(false) },
           }),
           h('p', { style: css.hint },
             'Ключ из личного кабинета routerai.ru. Значение секрета не показывается, ',
@@ -194,7 +194,7 @@ window.__ModuleLoader__.load({
           ),
           !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
-            onClick: () => { setKeyInput(''); setDropKey(true) },
+            onClick: () => { setKeyInput(''); setDropKey(true); setSaved(false); setNoChanges(false) },
           }, 'Удалить сохранённый ключ') : null,
           dropKey ? h('p', { style: css.hint }, 'Ключ будет удалён при сохранении; если ключ не задан, ничего не изменится.') : null),
         h('div', { style: css.row },

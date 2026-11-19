@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
       ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
       ['z-ai/glm-5', 'GLM 5 — хороша по-русски (exa)'],
       ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 (exa)'],
-      ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — поиск бесплатно (auto)'],
+      ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
     ]
     const ENGINES = [
       ['auto', 'Auto — RouterAI сам выбирает движок (рекомендуется)'],
@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
         color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-layer-2, transparent)',
         border: '1px solid var(--dsw-alias-border-l2, currentColor)',
       },
-      primary: { background: 'var(--dsw-alias-brand-primary, #2563eb)', color: '#fff', border: 'none' },
+      primary: { fontWeight: 600, borderColor: 'var(--dsw-alias-brand-primary, currentColor)' },
       status: { fontSize: '12px' },
       ok: { color: 'var(--dsw-alias-state-success-primary, inherit)' },
       err: { color: 'var(--dsw-alias-state-error-primary, inherit)' },
@@ -100,6 +100,7 @@ window.__ModuleLoader__.load({
       const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setNoChanges(false); setInvalid(null) }
 
       const keyEntered = keyInput.trim() !== ''
+      const keyConfigured = dropKey ? false : keyEntered || value.apiKeyIsSet === true || userLayer.apiKey !== undefined
 
       const save = async () => {
         setInvalid(null)
@@ -189,10 +190,15 @@ window.__ModuleLoader__.load({
             onChange: e => { setKeyInput(e.target.value); setDropKey(false); setSaved(false); setNoChanges(false) },
           }),
           h('p', { style: css.hint },
-            'Ключ из личного кабинета routerai.ru. Значение секрета не показывается, ',
-            'но сохранение и удаление работают; после «Сохранено» плагин подхватывает ключ без перезапуска.',
+            'Ключ из личного кабинета: https://routerai.ru/p/9WAUCXCP. Значение ключа не показывается, ',
+            'но сохранение и удаление работают без перезапуска.',
           ),
-          !dropKey ? h('button', {
+          h('p', { style: css.status },
+            keyConfigured
+              ? h('span', { style: css.ok }, 'Ключ задан: инструмент web_search предлагается модели.')
+              : h('span', { style: css.warn }, 'Ключ не задан: инструмент web_search модели не предлагается.'),
+          ),
+          keyConfigured && !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
             onClick: () => { setKeyInput(''); setDropKey(true); setSaved(false); setNoChanges(false) },
           }, 'Удалить сохранённый ключ') : null,

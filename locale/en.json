@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Веб-поиск RouterAI",
-    "description": "Инструмент web_search через API RouterAI (routerai.ru): настраиваемый API-ключ, модель и движок поиска (auto / native / exa). Работает без учётной записи DeepSeek — плата списывается с баланса RouterAI.",
+    "description": "Поиск в интернете для модели: инструмент web_search через RouterAI (routerai.ru/p/9WAUCXCP). Работает, когда Harness подключён к любому провайдеру модели, а не только к DeepSeek. Нужен API-ключ RouterAI; запросы платные — с баланса RouterAI. Ключ, модель и движок поиска (auto / native / exa) настраиваются на странице плагина.",
     "detail": "docs/DETAIL.md"
   }
 }

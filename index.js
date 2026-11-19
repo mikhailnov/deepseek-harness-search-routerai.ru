@@ -18,8 +18,8 @@ import z from './vendor/node_modules/@deepseek-ai/schemastery/lib/index.mjs'
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-search-routerai'
 
-/** Служба web, в которую регистрируется провайдер поиска. */
-export const inject = ['web']
+/** Служба web, в которую регистрируется провайдер поиска, и таймер периодической синхронизации служебного поля. */
+export const inject = ['web', 'timer']
 
 const DEFAULT_BASE_URL = 'https://routerai.ru/api/v1'
 /**
@@ -34,24 +34,25 @@ const DEFAULT_TIMEOUT_MS = 60000
  * поддерживают только провайдеры с собственным поиском (OpenAI, Google,
  * xAI, Anthropic); движок `exa` работает с любой моделью, `auto` выбирает
  * подходящий сам. Цены за запрос поиска: OpenAI/Anthropic ~1,07–1,23 ₽,
- * Google ~1,5 ₽, xAI ~0,53 ₽, Exa ~0,45 ₽ за результат.
+ * Google ~1,5 ₽, xAI ~0,53 ₽, Exa ~0,45 ₽ за результат, AliceAI ~0,05 ₽
+ * (ответ-конспект без ссылок).
  */
 const SEARCH_MODELS = [
-  ['google/gemini-2.5-flash-lite', 'Google Gemini 2.5 Flash Lite — дешёвая, быстрая, с цитатами (native)'],
-  ['google/gemini-3-flash-preview', 'Google Gemini 3 Flash Preview — быстрая, цитаты (native)'],
-  ['google/gemini-3.6-flash', 'Google Gemini 3.6 Flash — свежая Flash-модель (native)'],
-  ['openai/gpt-4.1-mini', 'OpenAI GPT-4.1 Mini — дешёвая, подробные цитаты (native)'],
-  ['openai/gpt-5.4-mini', 'OpenAI GPT-5.4 Mini — быстрая, цитаты (native)'],
-  ['x-ai/grok-4.20', 'xAI Grok 4.20 — дешёвый поиск (~0,53 ₽/запрос, native)'],
-  ['x-ai/grok-4.6', 'xAI Grok 4.6 — дешёвый поиск (~0,59 ₽/запрос, native)'],
-  ['anthropic/claude-haiku-4.5', 'Anthropic Claude Haiku 4.5 — ответ без аннотаций, только текст (native)'],
-  ['anthropic/claude-haiku-5.5', 'Anthropic Claude Haiku 5.5 — дешёвая, хорошие ответы (native)'],
+  ['google/gemini-2.5-flash-lite', 'Google Gemini 2.5 Flash Lite — недорогая, со ссылками (native)'],
+  ['google/gemini-3-flash-preview', 'Google Gemini 3 Flash Preview — быстрая, со ссылками (native)'],
+  ['google/gemini-3.6-flash', 'Google Gemini 3.6 Flash — новая Flash-модель (native)'],
+  ['openai/gpt-4.1-mini', 'OpenAI GPT-4.1 Mini — недорогая, подробные ссылки (native)'],
+  ['openai/gpt-5.4-mini', 'OpenAI GPT-5.4 Mini — быстрая, со ссылками (native)'],
+  ['x-ai/grok-4.20', 'xAI Grok 4.20 — дешёвый поиск, ~0,5 ₽ за запрос (native)'],
+  ['x-ai/grok-4.6', 'xAI Grok 4.6 — дешёвый поиск (native)'],
+  ['anthropic/claude-haiku-4.5', 'Anthropic Claude Haiku 4.5 — ответ текстом, без ссылок (native)'],
+  ['anthropic/claude-haiku-5.5', 'Anthropic Claude Haiku 5.5 — недорогая (native)'],
   ['perplexity/sonar', 'Perplexity Sonar — только движок auto или exa, не native'],
-  ['openai/gpt-5-nano', 'OpenAI GPT-5 Nano — самая дешёвая OpenAI (exa)'],
-  ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
-  ['z-ai/glm-5', 'Z.ai GLM 5 — хорошо русским языком (exa)'],
-  ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 — дешёвая (exa)'],
-  ['yandex/aliceai-llm-flash', 'Яндекс AliceAI LLM Flash — поиск бесплатно (auto)'],
+  ['openai/gpt-5-nano', 'OpenAI GPT-5 Nano — самая недорогая у OpenAI (exa)'],
+  ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень недорогая (exa)'],
+  ['z-ai/glm-5', 'Z.ai GLM 5 — хороша с русским языком (exa)'],
+  ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 — недорогая (exa)'],
+  ['yandex/aliceai-llm-flash', 'Яндекс AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
 ]
 
 const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).description(description))
@@ -77,6 +78,12 @@ export const Config = z.object({
   includeDomains: z.array(z.string()).volatile().description('Ограничить поиск только этими доменами (например, wikipedia.org). Поддерживаются подстановочные знаки; совместимость зависит от движка.').default([]),
   excludeDomains: z.array(z.string()).volatile().description('Исключить эти домены из результатов. Совместимость зависит от движка.').default([]),
   timeoutMs: z.number().step(1).min(5000).max(300000).volatile().description('Таймаут одного поискового запроса, мс.').default(DEFAULT_TIMEOUT_MS),
+  /**
+   * Служебное поле: плагин поддерживает его сам, а страница настроек
+   * показывает по нему, задан ли API-ключ (слои значений редактируют
+   * секреты, поэтому присутствие ключа иначе в форму не попадает).
+   */
+  apiKeyIsSet: z.boolean().volatile().description('Поддерживается плагином автоматически: задан ли API-ключ. Вручную не меняйте.').default(false),
 })
 
 /**
@@ -136,6 +143,24 @@ export function apply(ctx, config) {
     const key = config.apiKey.get()?.trim()
     return key ? key : undefined
   }
+
+  /**
+   * Держать служебное поле apiKeyIsSet равным наличию ключа: форма настроек
+   * читает его из значений конфигурации (сами значения секрета редактируются,
+   * поэтому присутствие ключа иначе в форму не попадает). Запись идёт через
+   * редактор конфигурации; при недоступном редакторе повтор попытки —
+   * на следующем такте интервала.
+   */
+  const syncKeyMirror = () => {
+    const entry = ctx.fiber?.entry
+    const editor = ctx.get('configEditor')
+    if (entry === undefined || editor === undefined) return
+    if (config.apiKeyIsSet.get() === (apiKeyOf() !== undefined)) return
+    editor.edit(entry, current => ({ ...current, apiKeyIsSet: apiKeyOf() !== undefined }))
+      .catch(() => { /* Профиль без записи: повторим на следующем такте. */ })
+  }
+  syncKeyMirror()
+  ctx.effect(() => ctx.timer.interval(syncKeyMirror, 5000))
 
   ctx.web.registerSearchProvider({
     id: 'routerai',

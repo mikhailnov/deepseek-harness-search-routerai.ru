@@ -1,5 +1,5 @@
 /**
- * Веб-поиск через RouterAI (https://routerai.ru/p/9WAUCXCP) для DeepSeek Harness.
+ * Веб-поиск через RouterAI.ru (https://routerai.ru/p/9WAUCXCP) для DeepSeek Harness.
  *
  * Регистрирует провайдера `routerai` в службе `ctx.web`, поэтому инструмент
  * `web_search` harness начинает работать без учётной записи DeepSeek: запрос
@@ -38,20 +38,20 @@ const DEFAULT_TIMEOUT_MS = 60000
  * (ответ-конспект без ссылок).
  */
 const SEARCH_MODELS = [
-  ['google/gemini-2.5-flash-lite', 'Google Gemini 2.5 Flash Lite — недорогая, со ссылками (native)'],
+  ['google/gemini-2.5-flash-lite', 'Google Gemini 2.5 Flash Lite — дешёвая, со ссылками (native)'],
   ['google/gemini-3-flash-preview', 'Google Gemini 3 Flash Preview — быстрая, со ссылками (native)'],
   ['google/gemini-3.6-flash', 'Google Gemini 3.6 Flash — новая Flash-модель (native)'],
-  ['openai/gpt-4.1-mini', 'OpenAI GPT-4.1 Mini — недорогая, подробные ссылки (native)'],
+  ['openai/gpt-4.1-mini', 'OpenAI GPT-4.1 Mini — дешёвая, подробные ссылки (native)'],
   ['openai/gpt-5.4-mini', 'OpenAI GPT-5.4 Mini — быстрая, со ссылками (native)'],
-  ['x-ai/grok-4.20', 'xAI Grok 4.20 — недорогой поиск, ~0,5 ₽ за запрос (native)'],
-  ['x-ai/grok-4.6', 'xAI Grok 4.6 — недорогой поиск (native)'],
+  ['x-ai/grok-4.20', 'xAI Grok 4.20 — дешёвый поиск, ~0,5 ₽ за запрос (native)'],
+  ['x-ai/grok-4.6', 'xAI Grok 4.6 — дешёвый поиск (native)'],
   ['anthropic/claude-haiku-4.5', 'Anthropic Claude Haiku 4.5 — ответ текстом, без ссылок (native)'],
-  ['anthropic/claude-haiku-5.5', 'Anthropic Claude Haiku 5.5 — недорогая (native)'],
+  ['anthropic/claude-haiku-5.5', 'Anthropic Claude Haiku 5.5 — дешёвая (native)'],
   ['perplexity/sonar', 'Perplexity Sonar — только движок auto или exa, не native'],
-  ['openai/gpt-5-nano', 'OpenAI GPT-5 Nano — самая недорогая у OpenAI (exa)'],
-  ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень недорогая (exa)'],
+  ['openai/gpt-5-nano', 'OpenAI GPT-5 Nano — самая дешёвая у OpenAI (exa)'],
+  ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
   ['z-ai/glm-5', 'Z.ai GLM 5 — хороша с русским языком (exa)'],
-  ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 — недорогая (exa)'],
+  ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 — дешёвая (exa)'],
   ['yandex/aliceai-llm-flash', 'Яндекс AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
 ]
 
@@ -64,7 +64,7 @@ const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).
  * запроса.
  */
 export const Config = z.object({
-  apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета https://routerai.ru/p/9WAUCXCP. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
+  apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета RouterAI.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
   baseUrl: z.string().volatile().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
   model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всех yandex/aliceai-llm-flash (~0,05 ₽ за запрос, ответ без ссылок); со ссылками на источники — Qwen 3.5 9B или GPT-5 Nano с движком exa.').default('google/gemini-2.5-flash-lite'),
   engine: z.union([
@@ -174,8 +174,8 @@ export function apply(ctx, config) {
     id: 'routerai',
     title: 'RouterAI',
     description: {
-      en: 'Web search through the RouterAI API (https://routerai.ru/p/9WAUCXCP) with a selectable model and engine (auto / native / exa). Paid per request on the RouterAI balance.',
-      ru: 'Веб-поиск через API RouterAI (https://routerai.ru/p/9WAUCXCP) с выбором модели и движка (auto / native / exa). Плата за запросы списывается с баланса RouterAI.',
+      en: 'Web search through the RouterAI.ru API with a selectable model and engine (auto / native / exa). Paid per request on the RouterAI balance.',
+      ru: 'Веб-поиск через API RouterAI.ru с выбором модели и движка (auto / native / exa). Плата за запросы списывается с баланса RouterAI.',
     },
     available: () => apiKeyOf() !== undefined,
     ready: async () => apiKeyOf() !== undefined,

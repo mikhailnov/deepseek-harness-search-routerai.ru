@@ -1,5 +1,5 @@
 /**
- * Веб-поиск через RouterAI (https://routerai.ru) для DeepSeek Harness.
+ * Веб-поиск через RouterAI (https://routerai.ru/p/9WAUCXCP) для DeepSeek Harness.
  *
  * Регистрирует провайдера `routerai` в службе `ctx.web`, поэтому инструмент
  * `web_search` harness начинает работать без учётной записи DeepSeek: запрос
@@ -64,9 +64,9 @@ const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).
  * запроса.
  */
 export const Config = z.object({
-  apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета https://routerai.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
+  apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета https://routerai.ru/p/9WAUCXCP. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
   baseUrl: z.string().volatile().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
-  model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всего: Qwen 3.5 9B и GPT-5 Nano с движком exa; Gemini 2.5 Flash Lite — дешёвый вариант с нативным поиском.').default('google/gemini-2.5-flash-lite'),
+  model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всех yandex/aliceai-llm-flash (~0,05 ₽ за запрос, ответ без ссылок); со ссылками на источники — Qwen 3.5 9B или GPT-5 Nano с движком exa.').default('google/gemini-2.5-flash-lite'),
   engine: z.union([
     z.const('auto').description('Auto — RouterAI сам выбирает движок (рекомендуется)'),
     z.const('native').description('Native — нативный поиск провайдера модели (OpenAI, Google, xAI, Anthropic, Perplexity)'),
@@ -116,8 +116,8 @@ function toSearchResult(data) {
 
 /**
  * Описание ошибки RouterAI: сообщение об ошибке API, если оно есть, иначе
- * краткая сводка по HTTP-статусу и телу.
- * @param {number} status - HTTP-статус ответа.
+ * краткая сводка по коду состояния HTTP и телу.
+ * @param {number} status - код состояния HTTP ответа.
  * @param {string} body - тело ответа.
  * @returns {string} Текст ошибки для модели и пользователя.
  */
@@ -151,13 +151,21 @@ export function apply(ctx, config) {
    * редактор конфигурации; при недоступном редакторе повтор попытки —
    * на следующем такте интервала.
    */
+  let mirrorFailedFor
   const syncKeyMirror = () => {
     const entry = ctx.fiber?.entry
     const editor = ctx.get('configEditor')
     if (entry === undefined || editor === undefined) return
-    if (config.apiKeyIsSet.get() === (apiKeyOf() !== undefined)) return
-    editor.edit(entry, current => ({ ...current, apiKeyIsSet: apiKeyOf() !== undefined }))
-      .catch(() => { /* Профиль без записи: повторим на следующем такте. */ })
+    const next = apiKeyOf() !== undefined
+    if (config.apiKeyIsSet.get() === next) return
+    // После отказа не повторяем запись, пока состояние ключа не изменится:
+    // вечный тихий цикл повторов в профиле без записи не нужен.
+    if (mirrorFailedFor === next) return
+    editor.edit(entry, current => ({ ...current, apiKeyIsSet: next }))
+      .then(() => { mirrorFailedFor = undefined }, () => {
+        mirrorFailedFor = next
+        ctx.logger?.warn?.('web-search-routerai: не удалось сохранить служебное поле apiKeyIsSet')
+      })
   }
   syncKeyMirror()
   ctx.effect(() => ctx.timer.interval(syncKeyMirror, 5000))
@@ -166,8 +174,8 @@ export function apply(ctx, config) {
     id: 'routerai',
     title: 'RouterAI',
     description: {
-      en: 'Web search through the RouterAI API (https://routerai.ru) with a selectable model and engine (auto / native / exa). Paid per request on the RouterAI balance.',
-      ru: 'Веб-поиск через API RouterAI (https://routerai.ru) с выбором модели и движка (auto / native / exa). Плата за запросы списывается с баланса RouterAI.',
+      en: 'Web search through the RouterAI API (https://routerai.ru/p/9WAUCXCP) with a selectable model and engine (auto / native / exa). Paid per request on the RouterAI balance.',
+      ru: 'Веб-поиск через API RouterAI (https://routerai.ru/p/9WAUCXCP) с выбором модели и движка (auto / native / exa). Плата за запросы списывается с баланса RouterAI.',
     },
     available: () => apiKeyOf() !== undefined,
     ready: async () => apiKeyOf() !== undefined,

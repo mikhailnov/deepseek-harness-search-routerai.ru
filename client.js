@@ -15,19 +15,19 @@ window.__ModuleLoader__.load({
 
     /** Проверенные модели веб-поиска (см. index.js и docs/DETAIL.md). */
     const MODELS = [
-      ['google/gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite — дешёвая, цитаты (native)'],
+      ['google/gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite — недорогая, со ссылками (native)'],
       ['google/gemini-3-flash-preview', 'Gemini 3 Flash Preview (native)'],
       ['google/gemini-3.6-flash', 'Gemini 3.6 Flash (native)'],
       ['openai/gpt-4.1-mini', 'GPT-4.1 Mini (native)'],
       ['openai/gpt-5.4-mini', 'GPT-5.4 Mini (native)'],
       ['x-ai/grok-4.20', 'Grok 4.20 — дешёвый поиск (native)'],
       ['x-ai/grok-4.6', 'Grok 4.6 — дешёвый поиск (native)'],
-      ['anthropic/claude-haiku-4.5', 'Claude Haiku 4.5 — текст без аннотаций (native)'],
+      ['anthropic/claude-haiku-4.5', 'Claude Haiku 4.5 — ответ текстом, без ссылок (native)'],
       ['anthropic/claude-haiku-5.5', 'Claude Haiku 5.5 (native)'],
       ['perplexity/sonar', 'Perplexity Sonar (только auto/exa)'],
-      ['openai/gpt-5-nano', 'GPT-5 Nano — самая дешёвая OpenAI (exa)'],
-      ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень дешёвая (exa)'],
-      ['z-ai/glm-5', 'GLM 5 — хороша по-русски (exa)'],
+      ['openai/gpt-5-nano', 'GPT-5 Nano — самая недорогая у OpenAI (exa)'],
+      ['qwen/qwen3.5-9b', 'Qwen 3.5 9B — очень недорогая (exa)'],
+      ['z-ai/glm-5', 'GLM 5 — хорошо владеет русским языком (exa)'],
       ['deepseek/deepseek-v3.2', 'DeepSeek V3.2 (exa)'],
       ['yandex/aliceai-llm-flash', 'AliceAI LLM Flash — ~0,05 ₽ за запрос, ответ-конспект без ссылок (auto)'],
     ]
@@ -100,7 +100,7 @@ window.__ModuleLoader__.load({
       const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setNoChanges(false); setInvalid(null) }
 
       const keyEntered = keyInput.trim() !== ''
-      const keyConfigured = dropKey ? false : keyEntered || value.apiKeyIsSet === true || userLayer.apiKey !== undefined
+      const keySaved = value.apiKeyIsSet === true || userLayer.apiKey !== undefined
 
       const save = async () => {
         setInvalid(null)
@@ -152,7 +152,7 @@ window.__ModuleLoader__.load({
 
       const disabled = saving || !snapshot.writable || snapshot.status !== 'ready'
       if (snapshot.status === 'loading') {
-        return h('p', { style: css.hint }, 'Загрузка настроек…')
+        return h('p', { style: css.hint }, 'Открываются настройки…')
       }
       if (snapshot.status === 'unavailable') {
         return h('p', { style: css.hint }, 'Настройки недоступны: конфигурация плагина не открыта в этом профиле.')
@@ -190,15 +190,17 @@ window.__ModuleLoader__.load({
             onChange: e => { setKeyInput(e.target.value); setDropKey(false); setSaved(false); setNoChanges(false) },
           }),
           h('p', { style: css.hint },
-            'Ключ из личного кабинета: https://routerai.ru/p/9WAUCXCP. Значение ключа не показывается, ',
+            'Ключ из личного кабинета: https://routerai.ru/p/9WAUCXCP. Значение ключа не отображается, ',
             'но сохранение и удаление работают без перезапуска.',
           ),
           h('p', { style: css.status },
-            keyConfigured
-              ? h('span', { style: css.ok }, 'Ключ задан: инструмент web_search предлагается модели.')
-              : h('span', { style: css.warn }, 'Ключ не задан: инструмент web_search модели не предлагается.'),
+            keyEntered
+              ? h('span', { style: css.hint }, 'Новый ключ будет задан после сохранения.')
+              : keySaved
+                ? h('span', { style: css.ok }, 'Ключ задан: инструмент web_search предлагается модели.')
+                : h('span', { style: css.warn }, 'Ключ не задан: инструмент web_search модели не предлагается.'),
           ),
-          keyConfigured && !dropKey ? h('button', {
+          keySaved && !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
             onClick: () => { setKeyInput(''); setDropKey(true); setSaved(false); setNoChanges(false) },
           }, 'Удалить сохранённый ключ') : null,
@@ -210,7 +212,7 @@ window.__ModuleLoader__.load({
             value: currentModel,
             onChange: e => set('model', e.target.value),
           }, modelOptions.map(([id, label]) => h('option', { key: id, value: id }, `${id} — ${label}`))),
-          h('p', { style: css.hint }, 'Только модели, проверенные с веб-поиском RouterAI. Дешевле всего: Qwen 3.5 9B или GPT-5 Nano с движком exa.')),
+          h('p', { style: css.hint }, 'Только модели, проверенные с веб-поиском RouterAI. Дешевле всех AliceAI LLM Flash (~0,05 ₽ за запрос, ответ без ссылок); со ссылками — Qwen 3.5 9B или GPT-5 Nano с движком exa.')),
         h('div', { style: css.row },
           h('label', { style: css.label, htmlFor: 'routerai-engine' }, 'Движок поиска'),
           h('select', {
@@ -262,7 +264,7 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', style: css.button, disabled, onClick: resetEdits }, 'Отменить изменения'),
           h('span', { role: 'status', 'aria-live': 'polite', style: css.status },
             invalid ? h('span', { style: css.err }, invalid)
-              : failed ? h('span', { style: css.err }, 'Сохранение не удалось — проверьте значения.')
+              : failed ? h('span', { style: css.err }, 'Сохранение не удалось — проверьте значения и повторите.')
                 : saved ? h('span', { style: css.ok }, 'Сохранено.')
                   : noChanges ? h('span', { style: css.hint }, 'Нет изменений.')
                     : null),

@@ -22,7 +22,12 @@ export const name = 'web-search-routerai'
 export const inject = ['web']
 
 const DEFAULT_BASE_URL = 'https://routerai.ru/api/v1'
-const DEFAULT_TIMEOUT_MS = 120000
+/**
+ * Таймаут по умолчанию не выше 60 с: базовая композиция DSH ограничивает
+ * инструмент web_search значением `tool-web` `searchTimeoutMs` (60 000 мс),
+ * и раньше срабатывает меньшее из двух пределов.
+ */
+const DEFAULT_TIMEOUT_MS = 60000
 
 /**
  * Модели, проверенные с веб-поиском RouterAI 2026-11-18. Движок `native`
@@ -77,11 +82,12 @@ export const Config = z.object({
 /**
  * Разобрать ответ RouterAI в WebSearchResult: текст ответа — в content,
  * аннотации url_citation — в sources (приводится к общему виду, дубли URL
- * отбрасываются).
+ * отбрасываются, выдержка обрезается до длины, пригодной для отображения).
  * @param {any} data - тело ответа /chat/completions.
  * @returns {{ content: string, sources: Array<{url:string,title?:string,snippet?:string}>, truncated: false }}
  */
 function toSearchResult(data) {
+  const SNIPPET_LIMIT = 300
   const message = data?.choices?.[0]?.message ?? {}
   const content = typeof message.content === 'string' ? message.content.trim() : ''
   const seen = new Set()
@@ -91,10 +97,11 @@ function toSearchResult(data) {
     const citation = annotation.url_citation ?? {}
     if (typeof citation.url !== 'string' || citation.url.length === 0 || seen.has(citation.url)) continue
     seen.add(citation.url)
+    const snippet = typeof citation.content === 'string' ? citation.content.slice(0, SNIPPET_LIMIT) : undefined
     sources.push({
       url: citation.url,
       ...(typeof citation.title === 'string' && citation.title.length > 0 ? { title: citation.title } : {}),
-      ...(typeof citation.content === 'string' && citation.content.length > 0 ? { snippet: citation.content } : {}),
+      ...(snippet !== undefined && snippet.length > 0 ? { snippet } : {}),
     })
   }
   return { content, sources, truncated: false }
@@ -121,7 +128,8 @@ function describeFailure(status, body) {
 /**
  * Зарегистрировать провайдера поиска `routerai` в `ctx.web`.
  * @param {import('@deepseek-ai/cordis').Context} ctx - контекст плагина.
- * @param {{ [K in keyof ReturnType<typeof Config.get>]: ReturnType<ReturnType<typeof Config.get>[K]['get']> }} config - конфигурация (volatile-поля читаются через `.get()`).
+ * @param {Record<string, { get(): any }>} config - конфигурация: все поля volatile,
+ *   поэтому значения читаются аксессорами `.get()` в момент запроса и меняются без перезапуска.
  */
 export function apply(ctx, config) {
   const apiKeyOf = () => {
@@ -141,7 +149,9 @@ export function apply(ctx, config) {
     search: async (request, signal) => {
       const apiKey = apiKeyOf()
       if (apiKey === undefined) throw new Error('RouterAI web search is not configured: set the API key in the plugin settings (Plugins → Веб-поиск RouterAI).')
-      const baseUrl = config.baseUrl.get().replace(/\/+$/, '')
+      // Пустая строка в конфиге равносильна отсутствию значения.
+      const configuredBase = config.baseUrl.get()?.trim()
+      const baseUrl = (configuredBase || DEFAULT_BASE_URL).replace(/\/+$/, '')
       const model = config.model.get()
       const engine = config.engine.get()
       const maxResults = request.maxResults ?? config.maxResults.get()
@@ -164,22 +174,31 @@ export function apply(ctx, config) {
       ]
 
       const timeout = AbortSignal.timeout(timeoutMs)
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          plugins: [webPlugin],
-          messages,
-          max_tokens: maxTokens,
-        }),
-        signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
-        // Ключ уходит только на настроенный эндпоинт: редиректы не следуются.
-        redirect: 'error',
-      })
+      let response
+      try {
+        response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            plugins: [webPlugin],
+            messages,
+            max_tokens: maxTokens,
+          }),
+          signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+          // Ключ уходит только на настроенный эндпоинт: редиректы не следуются.
+          redirect: 'error',
+        })
+      } catch (error) {
+        // Собственный таймаут отличается от отмены вызывающей стороной: для неё
+        // ошибка пробрасывается как есть, а таймаут получает объяснение.
+        const timedOut = timeout.aborted === true
+        if (signal?.aborted === true || !timedOut) throw error
+        throw new Error(`RouterAI web search timed out after ${timeoutMs} ms; increase the timeout or pick a faster model/engine in the plugin settings.`)
+      }
 
       const body = await response.text()
       if (!response.ok) throw new Error(describeFailure(response.status, body))

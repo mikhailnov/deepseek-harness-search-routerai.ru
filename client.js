@@ -36,6 +36,12 @@ window.__ModuleLoader__.load({
       ['native', 'Native — нативный поиск провайдера модели'],
       ['exa', 'Exa — работает с любой моделью (~0,45 ₽ за результат)'],
     ]
+    /** Диапазоны числовых полей (синхронизированы со схемой в index.js). */
+    const RANGES = {
+      maxResults: { min: 1, max: 20, label: 'Максимум результатов' },
+      maxTokens: { min: 64, max: 8192, label: 'Лимит токенов ответа' },
+      timeoutMs: { min: 5000, max: 300000, label: 'Таймаут запроса, мс' },
+    }
 
     const css = {
       section: { display: 'grid', gap: '14px' },
@@ -61,73 +67,114 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Одна форма настроек. Черновик локальный; «Сохранить» отправляет только
-     * изменённые поля (set) и сброс ключа (unset) с ревизией снапшота.
+     * Точка входа слота: решает, что рисовать, без хуков — сама форма с
+     * хуками в RouterAiForm монтируется безусловно, чтобы порядок хуков
+     * не менялся между рендерами.
      */
     function RouterAiSettings(props) {
-      const form = props.form
       if (props.view === 'summary') return 'API-ключ, модель и движок веб-поиска RouterAI'
-      if (form === undefined) {
+      if (props.form === undefined) {
         return h('p', { style: css.hint }, 'Настройки недоступны: конфигурация плагина не открыта в этом профиле.')
       }
+      return h(RouterAiForm, { form: props.form })
+    }
+
+    /**
+     * Форма настроек. Черновик локальный; «Сохранить» отправляет только
+     * изменённые поля (set), сброс ключа и очищенный базовый URL — unset.
+     */
+    function RouterAiForm({ form }) {
       const snapshot = form.state
       const value = snapshot.value ?? {}
       const userLayer = snapshot.user ?? {}
       const [draft, setDraft] = useState({})
       const [saving, setSaving] = useState(false)
       const [failed, setFailed] = useState(false)
+      const [saved, setSaved] = useState(false)
+      const [invalid, setInvalid] = useState(null)
       const [keyInput, setKeyInput] = useState('')
       const [dropKey, setDropKey] = useState(false)
-      const set = (name, next) => setDraft(current => ({ ...current, [name]: next }))
+      const set = (name, next) => { setDraft(current => ({ ...current, [name]: next })); setSaved(false) }
       const field = (name, fallback) => (name in draft ? draft[name] : (value[name] ?? fallback))
+      const resetEdits = () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false); setSaved(false); setInvalid(null) }
 
-      const keyConfigured = dropKey ? false : Boolean(keyInput) || userLayer.apiKey !== undefined
+      const keyEntered = keyInput.trim() !== ''
+      const keyConfigured = dropKey ? false : keyEntered || userLayer.apiKey !== undefined
 
       const save = async () => {
+        setInvalid(null)
+        // Числовые поля: локальная проверка диапазонов даёт понятную ошибку
+        // вместо молчаливого отказа Host-валидации.
+        for (const [name, range] of Object.entries(RANGES)) {
+          if (!(name in draft)) continue
+          const parsed = Number(draft[name])
+          if (!Number.isInteger(parsed) || parsed < range.min || parsed > range.max) {
+            setInvalid(`${range.label}: целое число от ${range.min} до ${range.max}`)
+            return
+          }
+        }
         const ops = []
         if (dropKey) ops.push({ op: 'unset', path: ['apiKey'] })
-        else if (keyInput !== '') ops.push({ op: 'set', path: ['apiKey'], value: keyInput.trim() })
-        for (const name of ['baseUrl', 'model', 'engine', 'searchPrompt']) {
+        else if (keyEntered) ops.push({ op: 'set', path: ['apiKey'], value: keyInput.trim() })
+        for (const name of ['model', 'engine', 'searchPrompt']) {
           if (name in draft && draft[name] !== (value[name] ?? '')) {
             ops.push({ op: 'set', path: [name], value: String(draft[name]) })
           }
         }
-        for (const name of ['maxResults', 'maxTokens', 'timeoutMs']) {
-          if (name in draft) {
-            const parsed = Number(draft[name])
-            if (!Number.isInteger(parsed) || parsed <= 0) { setFailed(true); return }
-            if (parsed !== value[name]) ops.push({ op: 'set', path: [name], value: parsed })
-          }
+        if ('baseUrl' in draft) {
+          const trimmed = String(draft.baseUrl).trim()
+          // Пустое поле возвращает дефолт схемы, а не пустой URL.
+          if (trimmed === '') ops.push({ op: 'unset', path: ['baseUrl'] })
+          else if (trimmed !== (value.baseUrl ?? '')) ops.push({ op: 'set', path: ['baseUrl'], value: trimmed })
+        }
+        for (const name of Object.keys(RANGES)) {
+          if (!(name in draft)) continue
+          const parsed = Number(draft[name])
+          if (parsed !== value[name]) ops.push({ op: 'set', path: [name], value: parsed })
         }
         for (const name of ['includeDomains', 'excludeDomains']) {
-          if (name in draft) {
-            const list = String(draft[name]).split(',').map(s => s.trim()).filter(s => s !== '')
-            if (JSON.stringify(list) !== JSON.stringify(value[name] ?? [])) {
-              ops.push({ op: 'set', path: [name], value: list })
-            }
+          if (!(name in draft)) continue
+          const list = String(draft[name]).split(',').map(s => s.trim()).filter(s => s !== '')
+          if (JSON.stringify(list) !== JSON.stringify(value[name] ?? [])) {
+            ops.push({ op: 'set', path: [name], value: list })
           }
         }
-        if (ops.length === 0) return
-        setSaving(true); setFailed(false)
+        if (ops.length === 0) { setSaved(true); return }
+        setSaving(true); setFailed(false); setSaved(false)
         try {
           const accepted = await form.mutate(ops, snapshot.revision)
           setFailed(!accepted)
-          if (accepted) { setDraft({}); setKeyInput(''); setDropKey(false) }
+          if (accepted) { setDraft({}); setKeyInput(''); setDropKey(false); setSaved(true) }
         } catch { setFailed(true) }
         setSaving(false)
       }
 
-      const disabled = saving || !snapshot.writable
-      const numberInput = (name, label, hint) => h('div', { style: css.row },
-        h('label', { style: css.label, htmlFor: `routerai-${name}` }, label),
-        h('input', {
-          id: `routerai-${name}`, style: css.input, type: 'number', disabled,
-          value: field(name, ''),
-          onChange: e => set(name, e.target.value),
-        }),
-        hint ? h('p', { style: css.hint }, hint) : null)
+      const disabled = saving || !snapshot.writable || snapshot.status !== 'ready'
+      if (snapshot.status === 'loading') {
+        return h('p', { style: css.hint }, 'Загрузка настроек…')
+      }
+      if (snapshot.status === 'unavailable') {
+        return h('p', { style: css.hint }, 'Настройки недоступны: конфигурация плагина не открыта в этом профиле.')
+      }
 
-      return h('div', { style: css.section },
+      const numberInput = (name, hint) => {
+        const range = RANGES[name]
+        return h('div', { style: css.row },
+          h('label', { style: css.label, htmlFor: `routerai-${name}` }, range.label),
+          h('input', {
+            id: `routerai-${name}`, style: css.input, type: 'number', disabled,
+            min: range.min, max: range.max, step: 1, value: field(name, ''),
+            onChange: e => set(name, e.target.value),
+          }),
+          hint ? h('p', { style: css.hint }, hint) : null)
+      }
+
+      const currentModel = field('model', 'google/gemini-2.5-flash-lite')
+      const modelOptions = MODELS.some(([id]) => id === currentModel)
+        ? MODELS
+        : [[currentModel, 'не из проверенного списка'], ...MODELS]
+
+      return h('div', { style: css.section, 'data-routerai-settings': true },
         h('style', null, `
           [data-routerai-settings] input:disabled, [data-routerai-settings] select:disabled { opacity: .5 }
           [data-routerai-settings] select { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
@@ -149,16 +196,16 @@ window.__ModuleLoader__.load({
           ),
           userLayer.apiKey !== undefined && !dropKey ? h('button', {
             type: 'button', style: { ...css.button, marginTop: '4px' }, disabled,
-            onClick: () => { setDropKey(true); setKeyInput('') },
+            onClick: () => { setKeyInput(''); setDropKey(true) },
           }, 'Удалить сохранённый ключ') : null,
           dropKey ? h('p', { style: css.hint }, 'Ключ будет удалён при сохранении.') : null),
         h('div', { style: css.row },
           h('label', { style: css.label, htmlFor: 'routerai-model' }, 'Модель поиска'),
           h('select', {
             id: 'routerai-model', style: css.input, disabled,
-            value: field('model', 'google/gemini-2.5-flash-lite'),
+            value: currentModel,
             onChange: e => set('model', e.target.value),
-          }, MODELS.map(([id, label]) => h('option', { key: id, value: id }, `${id} — ${label}`))),
+          }, modelOptions.map(([id, label]) => h('option', { key: id, value: id }, `${id} — ${label}`))),
           h('p', { style: css.hint }, 'Только модели, проверенные с веб-поиском RouterAI. Дешевле всего: Qwen 3.5 9B или GPT-5 Nano с движком exa.')),
         h('div', { style: css.row },
           h('label', { style: css.label, htmlFor: 'routerai-engine' }, 'Движок поиска'),
@@ -175,10 +222,10 @@ window.__ModuleLoader__.load({
             placeholder: 'https://routerai.ru/api/v1', value: field('baseUrl', ''),
             onChange: e => set('baseUrl', e.target.value),
           }),
-          h('p', { style: css.hint }, 'Меняйте только для совместимого прокси.')),
-        numberInput('maxResults', 'Максимум результатов', 'От 1 до 20; влияет на стоимость (exa — за каждый результат).'),
-        numberInput('maxTokens', 'Лимит токенов ответа', 'Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.'),
-        numberInput('timeoutMs', 'Таймаут запроса, мс'),
+          h('p', { style: css.hint }, 'Меняйте только для совместимого прокси. Пустое поле возвращает значение по умолчанию.')),
+        numberInput('maxResults', 'От 1 до 20; влияет на стоимость (exa — за каждый результат).'),
+        numberInput('maxTokens', 'Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.'),
+        numberInput('timeoutMs', 'Вступает в силу меньшее из этого значения и таймаута инструмента web_search.'),
         h('div', { style: css.row },
           h('label', { style: css.label, htmlFor: 'routerai-searchPrompt' }, 'Промпт для поиска (необязательно)'),
           h('input', {
@@ -208,11 +255,12 @@ window.__ModuleLoader__.load({
         h('div', { style: css.buttons },
           h('button', { type: 'button', style: { ...css.button, ...css.primary }, disabled, onClick: save },
             saving ? 'Сохранение…' : 'Сохранить'),
-          h('button', {
-            type: 'button', style: css.button, disabled,
-            onClick: () => { setDraft({}); setKeyInput(''); setDropKey(false); setFailed(false) },
-          }, 'Отменить изменения'),
-          failed ? h('span', { style: { ...css.status, ...css.err } }, 'Сохранение не удалось — проверьте значения.') : null,
+          h('button', { type: 'button', style: css.button, disabled, onClick: resetEdits }, 'Отменить изменения'),
+          h('span', { role: 'status', 'aria-live': 'polite', style: css.status },
+            invalid ? h('span', { style: css.err }, invalid)
+              : failed ? h('span', { style: css.err }, 'Сохранение не удалось — проверьте значения.')
+                : saved ? h('span', { style: css.ok }, 'Сохранено.')
+                  : null),
           !snapshot.writable ? h('span', { style: { ...css.status, ...css.warn } }, 'Профиль только для чтения.') : null),
       )
     }

@@ -51,22 +51,27 @@ const SEARCH_MODELS = [
 
 const modelChoices = SEARCH_MODELS.map(([value, description]) => z.const(value).description(description))
 
-/** Конфигурация плагина; редактируется в менеджере плагинов DSH. */
+/**
+ * Конфигурация плагина; редактируется в менеджере плагинов DSH. Все поля
+ * volatile: страница настроек показывает только такие поля, значения
+ * применяются без перезапуска плагина и читаются через `.get()` в момент
+ * запроса.
+ */
 export const Config = z.object({
-  apiKey: z.string().role('secret').description('API-ключ RouterAI из личного кабинета https://routerai.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
-  baseUrl: z.string().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
-  model: z.union(modelChoices).description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всего: Qwen 3.5 9B и GPT-5 Nano с движком exa; Gemini 2.5 Flash Lite — дешёвый вариант с нативным поиском.').default('google/gemini-2.5-flash-lite'),
+  apiKey: z.string().role('secret').volatile().description('API-ключ RouterAI из личного кабинета https://routerai.ru. Без ключа провайдер неактивен и инструмент web_search не предлагается модели.'),
+  baseUrl: z.string().volatile().description('Базовый URL API RouterAI. Меняйте только для совместимого прокси.').default(DEFAULT_BASE_URL),
+  model: z.union(modelChoices).volatile().description('Модель, которой RouterAI выполняет поиск и сводит результаты. Дешевле всего: Qwen 3.5 9B и GPT-5 Nano с движком exa; Gemini 2.5 Flash Lite — дешёвый вариант с нативным поиском.').default('google/gemini-2.5-flash-lite'),
   engine: z.union([
     z.const('auto').description('Auto — RouterAI сам выбирает движок (рекомендуется)'),
     z.const('native').description('Native — нативный поиск провайдера модели (OpenAI, Google, xAI, Anthropic, Perplexity)'),
     z.const('exa').description('Exa — поиск Exa, работает с любой моделью (~0,45 ₽ за результат)'),
-  ]).description('Поисковый движок RouterAI. Native не поддерживает все модели — при ошибке выберите auto или exa.').default('auto'),
-  maxResults: z.number().step(1).min(1).max(20).description('Максимум результатов поиска в одном запросе.').default(5),
-  maxTokens: z.number().step(1).min(64).max(8192).description('Лимит токенов ответа модели. Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.').default(1024),
-  searchPrompt: z.string().description('Необязательный системный промпт для поисковых запросов (например, «Ищи актуальные и достоверные источники»).').default(''),
-  includeDomains: z.array(z.string()).description('Ограничить поиск только этими доменами (например, wikipedia.org). Поддерживаются подстановочные знаки; совместимость зависит от движка.').default([]),
-  excludeDomains: z.array(z.string()).description('Исключить эти домены из результатов. Совместимость зависит от движка.').default([]),
-  timeoutMs: z.number().step(1).min(5000).max(300000).description('Таймаут одного поискового запроса, мс.').default(DEFAULT_TIMEOUT_MS),
+  ]).volatile().description('Поисковый движок RouterAI. Native не поддерживает все модели — при ошибке выберите auto или exa.').default('auto'),
+  maxResults: z.number().step(1).min(1).max(20).volatile().description('Максимум результатов поиска в одном запросе.').default(5),
+  maxTokens: z.number().step(1).min(64).max(8192).volatile().description('Лимит токенов ответа модели. Не ставьте слишком мало: у рассуждающих моделей ответ может остаться пустым.').default(1024),
+  searchPrompt: z.string().volatile().description('Необязательный системный промпт для поисковых запросов (например, «Ищи актуальные и достоверные источники»).').default(''),
+  includeDomains: z.array(z.string()).volatile().description('Ограничить поиск только этими доменами (например, wikipedia.org). Поддерживаются подстановочные знаки; совместимость зависит от движка.').default([]),
+  excludeDomains: z.array(z.string()).volatile().description('Исключить эти домены из результатов. Совместимость зависит от движка.').default([]),
+  timeoutMs: z.number().step(1).min(5000).max(300000).volatile().description('Таймаут одного поискового запроса, мс.').default(DEFAULT_TIMEOUT_MS),
 })
 
 /**
@@ -116,11 +121,11 @@ function describeFailure(status, body) {
 /**
  * Зарегистрировать провайдера поиска `routerai` в `ctx.web`.
  * @param {import('@deepseek-ai/cordis').Context} ctx - контекст плагина.
- * @param {ReturnType<typeof Config.get>} config - конфигурация плагина.
+ * @param {{ [K in keyof ReturnType<typeof Config.get>]: ReturnType<ReturnType<typeof Config.get>[K]['get']> }} config - конфигурация (volatile-поля читаются через `.get()`).
  */
 export function apply(ctx, config) {
   const apiKeyOf = () => {
-    const key = config.apiKey?.trim()
+    const key = config.apiKey.get()?.trim()
     return key ? key : undefined
   }
 
@@ -135,36 +140,41 @@ export function apply(ctx, config) {
     ready: async () => apiKeyOf() !== undefined,
     search: async (request, signal) => {
       const apiKey = apiKeyOf()
-      if (apiKey === undefined) throw new Error('RouterAI web search is not configured: set the API key in the plugin settings (Plugins → Web search RouterAI).')
+      if (apiKey === undefined) throw new Error('RouterAI web search is not configured: set the API key in the plugin settings (Plugins → Веб-поиск RouterAI).')
+      const baseUrl = config.baseUrl.get().replace(/\/+$/, '')
+      const model = config.model.get()
+      const engine = config.engine.get()
+      const maxResults = request.maxResults ?? config.maxResults.get()
+      const maxTokens = config.maxTokens.get()
+      const searchPrompt = config.searchPrompt.get()
+      const includeDomains = config.includeDomains.get() ?? []
+      const excludeDomains = config.excludeDomains.get() ?? []
+      const timeoutMs = config.timeoutMs.get()
 
-      const webPlugin = {
-        id: 'web',
-        max_results: request.maxResults ?? config.maxResults,
-        engine: config.engine,
-      }
-      if (config.includeDomains.length > 0) webPlugin.include_domains = config.includeDomains
-      if (config.excludeDomains.length > 0) webPlugin.exclude_domains = config.excludeDomains
+      const webPlugin = { id: 'web', max_results: maxResults, engine }
+      if (includeDomains.length > 0) webPlugin.include_domains = includeDomains
+      if (excludeDomains.length > 0) webPlugin.exclude_domains = excludeDomains
 
       const messages = [
         {
           role: 'system',
-          content: `Ты — поисковый ассистент. Ответь на запрос пользователя по результатам веб-поиска: кратко (до 200 слов), по-русски (если запрос не на русском — на языке запроса), только проверенные по источникам факты. Не добавляй пояснений о своей работе.${config.searchPrompt ? ` ${config.searchPrompt}` : ''}`,
+          content: `Ты — поисковый ассистент. Ответь на запрос пользователя по результатам веб-поиска: кратко (до 200 слов), по-русски (если запрос не на русском — на языке запроса), только проверенные по источникам факты. Не добавляй пояснений о своей работе.${searchPrompt ? ` ${searchPrompt}` : ''}`,
         },
         { role: 'user', content: request.query },
       ]
 
-      const timeout = AbortSignal.timeout(config.timeoutMs)
-      const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      const timeout = AbortSignal.timeout(timeoutMs)
+      const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: config.model,
+          model,
           plugins: [webPlugin],
           messages,
-          max_tokens: config.maxTokens,
+          max_tokens: maxTokens,
         }),
         signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
         // Ключ уходит только на настроенный эндпоинт: редиректы не следуются.

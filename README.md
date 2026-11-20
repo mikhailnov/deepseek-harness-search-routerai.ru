@@ -18,18 +18,28 @@ RouterAI, обычно от 0,5 до 3 ₽ за запрос в зависимо
 
 ## Как начать
 
-1. Получите API-ключ в личном кабинете [RouterAI.ru](https://routerai.ru/p/9WAUCXCP)
-2. Откройте в DeepSeek Harness страницу **Plugins** и выберите карточку
-   **Веб-поиск RouterAI** в разделе **Built-in plugin settings** (рядом
-   с Subagent и Agent loop) — откроется страница с настройками. Второй путь
-   к той же форме: карточка в разделе **Installed plugins** → блок
-   **Components** → строка **Веб-поиск RouterAI**.
+1. Получите API-ключ в личном кабинете [RouterAI.ru](https://routerai.ru/p/9WAUCXCP). Название и настройки ключа на ваше усмотрение.<br>
+   ![](docs/screenshots/01-routerai-api-key.png)
+2. Откройте в DeepSeek Harness страницу **Плагины**.<br>
+   ![](docs/screenshots/02-dsh-plugins.png)
+3. Нажмите **Добавить плагин**.<br>
+   ![](docs/screenshots/03-add-plugin.png)
+4. Введите ссылку для установки плагина: `https://github.com/mikhailnov/deepseek-harness-search-routerai.ru`, нажмите **Установить**.<br>
+   ![](docs/screenshots/04-install-from-url.png)
+5. Дождитесь загрузки плагина и нажмите **Включить сейчас**.<br>
+   ![](docs/screenshots/05-enable-now.png)
+6. В разделе **Плагины** появится **Веб-поиск RouterAI**. Нажмите на него.<br>
+   ![](docs/screenshots/06-routerai-plugin-card.png)
 3. Вставьте ключ в поле «API-ключ RouterAI» и нажмите «Сохранить».
    Настраивать больше ничего не нужно: параметры по умолчанию подобраны
-   для дешёвого и быстрого поиска.
+   для дешёвого и быстрого поиска.<br>
+   ![](docs/screenshots/07-api-key-field.png)<br>
+   ![](docs/screenshots/08-api-key-saved.png)
 4. Проверьте: в новом сеансе спросите модель, например: «Какой сегодня курс
-   доллара по данным ЦБ РФ? Используй поиск». Модель вызовет `web_search`
-   и ответит со ссылками на источники.
+   грузинского лари по данным ЦБ РФ? Используй поиск». Модель вызовет `web_search`
+   и ответит со ссылками на источники.<br>
+   ![](docs/screenshots/09-search.png)<br>
+   ![](docs/screenshots/10-search.png)
 
 Пока ключ не задан, инструмент `web_search` модели не предлагается; после
 сохранения ключа он появляется в следующем шаге модели — перезапускать ничего
